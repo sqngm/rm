@@ -56,6 +56,34 @@ $thresholdTrio = 27
 
 #------------------------------------------------------#
 
+# 获取本机的机器名
+$computerName = $env:COMPUTERNAME
+
+# 获取外网IP地址
+$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "http://ifconfig.me/ip").Trim()
+
+#判断有没有米西IP
+$mixiIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "ZeroTier*" }
+$radminIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "Radmin*" }
+
+if ($mixiIPObject) {
+    $externalIP = $mixiIPObject.IPv4Address
+    Write-Output "[$timestamp] 当前为米西组网的方式来开服的，服务器名：$computerName ，米西IP: $externalIP (公网IP $realExternalIP)!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+} 
+elseif($radminIPObject) {
+    $externalIP = $radminIPObject.IPv4Address
+    Write-Output "[$timestamp] 当前为RadminVPN组网的方式来开服的(不用这个请卸载RadminVPN软件，因为这个装上就有，无论有没有连接到VPN服务端，会出现误判)，服务器名：$computerName ，Radmin IP: $externalIP  (公网IP $realExternalIP)!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+}
+
+else {
+    Write-Output "[$timestamp] 当前为直连服，服务器名：$computerName ，公网IP: $externalIP  (公网IP $realExternalIP) !" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+}
+
+$connectCMD = "open ${externalIP}:62169"
+
+$gameServerDashboardAPI = "http://20.2.29.37/api"
+
+
 Write-Output "##### $timestamp #####" | Tee-Object -FilePath $guardian_rumbleverse_log
 
 Write-Output "gameRootPath: $gameRootPath" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -265,7 +293,7 @@ function RestartGameServer {
         }
         elseif ($filteredOutput) {
             $foundPort = $true
-            Write-Output "[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]!! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Output "[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！] (连接代码： $connectCMD)!! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
         }
         else {
@@ -274,6 +302,28 @@ function RestartGameServer {
             Start-Sleep -Seconds 2
         }
         $findCount = $findCount+1
+    }
+}
+
+function Stop-ProcessInDirectory {
+    param (
+        [string]$directory,
+        [string]$processName
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    # 获取特定目录下的进程
+    $process = Get-Process | Where-Object {
+        $_.Path -like "$directory\*" -and $_.Name -eq $processName
+    } | Select-Object -First 1
+
+    # 停止该进程
+    if ($process) {
+        Stop-Process -Id $process.Id -Force
+        Write-Output "[$timestamp] Process in $directory stopped successfully." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    } else {
+        Write-Output "[$timestamp] No matching process found in $directory." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        #Stop-Process -Name $processName -Force 
     }
 }
 
@@ -296,7 +346,8 @@ while ($true) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         Write-Output "[$timestamp] ServerUnliving_SheikErrorLog" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
    
-        Stop-Process -Name $processName -Force
+        #Stop-Process -Name $processName -Force 
+        Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
         Start-Sleep -Seconds 8
         RestartGameServer
         continue
@@ -305,7 +356,7 @@ while ($true) {
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         Write-Output "[$timestamp] CreatePartyFailed" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
    
-        Stop-Process -Name $processName -Force
+        Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
         Start-Sleep -Seconds 8
         RestartGameServer        
         continue
@@ -373,7 +424,7 @@ while ($true) {
                 if (!$isReRunging -and (CheckProcessRunning)) {    
                     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
                     Write-Output "[$timestamp] now begin auto start in delay term" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-                    Stop-Process -Name $processName -Force
+                    Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
                     Start-Sleep -Seconds 3
                     RestartGameServer        
                 }
@@ -382,7 +433,7 @@ while ($true) {
         }
         else {
             if ($isRoundEnd) {                
-                Stop-Process -Name $processName -Force
+                Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
                 Start-Sleep -Seconds 8
                 RestartGameServer        
                 continue
