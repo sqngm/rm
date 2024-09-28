@@ -83,7 +83,7 @@ if ($mixiIPObject) {
     $externalIP = $mixiIPObject.IPv4Address
     $joinPromptTxt ="[$timestamp] 当前为米西组网的方式来开服的，服务器名：$computerName ，米西IP: $externalIP (公网IP $realExternalIP)! 要加入此服，请先去mx16.com下载客户端，进入软件后点左边的手柄图标->动作游戏或其他游戏->加入房间。等显示IP和延迟就可以加入了。`r`n " 
     $joinPromptTxt = $joinPromptTxt + "[$timestamp] 需要注意的是：如果一直获取不到IP或不显示延迟，请退出房间，或者 重启软件。`r`n" 
-    $joinPromptTxt = $joinPromptTxt + "[$timestamp] 需要注意的是：如果不玩游戏了，想退出游戏，请先退出 米西房间再关游戏，否则会导致游戏服务端异常退出，所有人都会掉线。" 
+    $joinPromptTxt = $joinPromptTxt + "[$timestamp] 需要注意的是：如果不玩游戏了，先退出游戏，最后再退米西房间，否则会导致游戏服务端异常退出，所有人都会掉线。" 
     Write-Output $joinPromptTxt | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 } 
 elseif ($radminIPObject) {
