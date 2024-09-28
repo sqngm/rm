@@ -35,10 +35,10 @@ $configFilePath = "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\Config.ini"
 
 #各模式已合并成一个文件，通过配置文件来修改游戏模式，或者通过运行时传递参数的方式(还未实现)？
 #目前改模式的方式：双击打开当前目录的服务器设置.bat 来修改
-#$gameModeFile = ".\Server.dll" 
+$gameModeFile = ".\Server.dll" 
 
 ## 下面的是老的版本，按模式分开的，如果上面那个方式有问题，可以切换回下面老的版本的方式来运行
-$gameModeFile = ".\v0.old\Solos.dll" #单排
+# $gameModeFile = "$PSScriptRoot\v0.old\Solos.dll" #单排
 # $gameModeFile = "$PSScriptRoot\v0.old\Duos.dll" #双排
 # $gameModeFile = "$PSScriptRoot\v0.old\from.ed.git\BR_Trios.dll" #三排
 # $gameModeFile = "$PSScriptRoot\v0.old\from.ed.git\BR_Quads.dll" #四排
@@ -46,14 +46,14 @@ $gameModeFile = ".\v0.old\Solos.dll" #单排
 
 
 #--------------------------自动切模式配置：目前还不支持修改，还有问题----------------------------#
-$enableAutoSwitchGameMode = $false  #默认未开启，改为$true表示 开启
+$enableAutoSwitchGameMode = $true  #默认未开启，改为$true表示 开启
 $global:alreadyChangedConfigGameMode = $false #更新一次记录状态，以避免后续循环更新出问题，重启后会重置此变量为false
 #0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排
 # 定义自动切换游戏模式的阈值变量
-$thresholdTraining = 0 
-$thresholdSolo = 1
-$thresholdDuo = 39
-$thresholdTrio = 40
+$thresholdTraining = 4 
+$thresholdSolo = 9
+$thresholdDuo = 18
+$thresholdTrio = 27
 
 #------------------------------------------------------#
 
@@ -67,21 +67,17 @@ $externalIP = $realExternalIP = (Invoke-RestMethod -Uri "http://ifconfig.me/ip")
 $mixiIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "ZeroTier*" }
 $radminIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "Radmin*" }
 
-$joinPromptTxt = ""
 if ($mixiIPObject) {
     $externalIP = $mixiIPObject.IPv4Address
-    $joinPromptTxt ="[$timestamp] 当前为米西组网的方式来开服的，服务器名：$computerName ，米西IP: $externalIP (公网IP $realExternalIP)!" 
-    Write-Output $joinPromptTxt | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    Write-Output "[$timestamp] 当前为米西组网的方式来开服的，服务器名：$computerName ，米西IP: $externalIP (公网IP $realExternalIP)!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 } 
 elseif ($radminIPObject) {
     $externalIP = $radminIPObject.IPv4Address
-    $joinPromptTxt = "[$timestamp] 当前为RadminVPN组网的方式来开服的(不用这个请卸载RadminVPN软件，因为这个装上就有，无论有没有连接到VPN服务端，会出现误判)，服务器名：$computerName ，Radmin IP: $externalIP  (公网IP $realExternalIP)!"
-    Write-Output $joinPromptTxt  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    Write-Output "[$timestamp] 当前为RadminVPN组网的方式来开服的(不用这个请卸载RadminVPN软件，因为这个装上就有，无论有没有连接到VPN服务端，会出现误判)，服务器名：$computerName ，Radmin IP: $externalIP  (公网IP $realExternalIP)!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 }
 
 else {
-    $joinPromptTxt =  "[$timestamp] 当前为直连服，服务器名：$computerName ，公网IP: $externalIP  (公网IP $realExternalIP) !"
-    Write-Output $joinPromptTxt | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    Write-Output "[$timestamp] 当前为直连服，服务器名：$computerName ，公网IP: $externalIP  (公网IP $realExternalIP) !" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 }
 
 $connectCMD = "open ${externalIP}:62169"
@@ -150,9 +146,9 @@ function CheckLogFile {
         #     Write-Output "[$timestamp] 找到队伍数量最后一条日志(即当前队伍数量)： $lastTeamLine " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         # }
 
-        $userJoinedLogStrs = $logContent | Select-String -Pattern "LogNet: NotifyAcceptingChannel"
+        $userJoinedLogStrs = $logContent | Select-String -Pattern "LogNet: Join succeeded: (\d+)"
         $userJoinedCount = $userJoinedLogStrs.Count
-        $UserExitLog = $logContent | Select-String -Pattern "LogNet: UChannel::Close"
+        $UserExitLog = $logContent | Select-String -Pattern "LogNet: UChannel::ReceivedSequencedBunch: Bunch.bClose == true. ChIndex == 0. Calling ConditionalCleanUp."
         $UserExitCount = $UserExitLog.Count
         $ConnecteUserCount = $userJoinedCount - $UserExitCount
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -167,8 +163,7 @@ function CheckLogFile {
         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         Write-Host $outputString
         if ($logContent -match "SheikErrorLog: Error: Source Client, System Login, CallCode Logout, ErrorCode -1") {
-            #$linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -Last 1 
-            $linesWithRemoteAddr = $logContent | Where-Object { $_ -match "Warning: UNetConnection::Tick: Connection TIMED OUT." } | Select-Object -Last 1  
+            $linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -Last 1 
             $pattern = "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
             $pattern1 = "Sheik:"
             $result = ($linesWithRemoteAddr -split $pattern1)[-1].Split("`n")[0]
@@ -179,8 +174,7 @@ function CheckLogFile {
             return "ServerUnliving_SheikErrorLog"
         }
         elseif ($logContent -match "Error: Task_CreateParty::CozmoWorkCompleted - Cozmo work failed: Failed to create party for user") {
-            #$linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -Last 1 
-            $linesWithRemoteAddr = $logContent | Where-Object { $_ -match "Warning: UNetConnection::Tick: Connection TIMED OUT." } | Select-Object -Last 1 
+            $linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -Last 1 
             $pattern = "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
             $pattern1 = "Sheik:"
             $result = ($linesWithRemoteAddr -split $pattern1)[-1].Split("`n")[0]
@@ -204,7 +198,7 @@ function CheckLogFile {
                 # 获取当前游戏模式
                 $currentGameMode = $configContent -match '游戏模式=(\d)'
     
-                $outputString = "[$timestamp]  `r`n 【已进入自动切换模式判断,仅当一局结束时才自动检测。暂时不支持从训练模式切换。】 当前游戏配置文件里面设置的最新模式为：$currentGameMode , 玩家人数为： $ConnecteUserCount  `r`n " 
+                $outputString = "[$timestamp] \r\t【已进入自动切换模式判断,仅当一局结束时才自动检测。暂时不支持从训练模式切换。】 当前游戏配置文件里面设置的最新模式为：$currentGameMode , 玩家人数为： $ConnecteUserCount \r\t" 
                 Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                 Write-Host $outputString 
                
@@ -311,14 +305,14 @@ function RestartGameServer {
     .\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe "-log" "-nullrhi" "-windowed"
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Output "`r`n[$timestamp] RestartGameServer:done!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    Write-Output "[$timestamp]\r\t RestartGameServer:done!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
         
     #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     $configContent = Get-Content -Path $configFilePath
     $currentGameMode = $configContent -match '游戏模式=(\d)'
 
-    Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent \r\t" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
 
     Start-Sleep -Seconds 20
@@ -353,31 +347,22 @@ function RestartGameServer {
     
     while (-not $foundPort) {  
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        # 这个不准确 ，有时候并不是62169
-        #$filteredOutput = netstat -ano | Select-String "62169" #如果修改过默认端口请把脚本里面的62169改成对应的端口，否则 会检测不到已启来。
-        
-        #根据进程名去找监听端口，非常准确 
-        $filteredOutput = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $false
+        $filteredOutput = netstat -ano | Select-String "62169" #如果修改过默认端口请把脚本里面的62169改成对应的端口，否则 会检测不到已启来。
         if (!(CheckProcessRunning)) {
             $foundPort = $true
-            Write-Output " `r`n[$timestamp] RestartGameServer: Server Crash, Now auto Start Now(服务端崩溃了，重启中。。)!! " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Output "[$timestamp] RestartGameServer: Server Crash, Now auto Start Now(服务端崩溃了，重启中。。)!! " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         }
         elseif ($filteredOutput) {
             $foundPort = $true
-            Write-Output " `r`n[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]【连接命令：$filteredOutput)!!】" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Output "[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！] (连接代码： $connectCMD)!! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
         }
         else {
-            Write-Output " `r`n[$timestamp] RestartGameServer: Waiting Server Ready! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Output "[$timestamp] RestartGameServer: Waiting Server Ready! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
             Start-Sleep -Seconds 2
         }
         $findCount = $findCount + 1
-
-        if($findCount -ge 30) {
-            Write-Output "`r`n[$timestamp] 【貌似 服务端挺久都没有启动成功，有可能是注入失败，请检查脚本开服日志。或者关闭这个窗口，重新打开试试。】`r`n" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-
-        }
     }
 }
 
@@ -387,11 +372,10 @@ function Stop-ProcessInDirectory {
         [string]$processName
     )
 
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"   
-    Stop-Process -Name $processName
+    Stop-Process -Name $processName -Force 
     return 
     ##下面的还有问题
-    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     # 获取特定目录下的进程
     $process = Get-Process -Name $processName | Where-Object {
         $_.Path  -match "$directory" -and $_.Name -eq $processName
@@ -407,51 +391,6 @@ function Stop-ProcessInDirectory {
         Stop-Process -Name $processName -Force 
     }
 }
-
-function Get-ListeningPortsByProcessName {
-    param (
-        [string]$processName,
-        [string]$externalJoinIP,
-        [bool]$isGetProcessId=$false
-    )
-
-    $listeningPorts = Get-NetUDPEndpoint -LocalAddress "0.0.0.0"
-    $procId = 0
-    $joinCommand = ""
-    # 遍历这些连接
-    foreach ($conn in $listeningPorts) {
-        $procId = $conn.OwningProcess
-        $localPort = $conn.LocalPort
-        $process = Get-Process -Id $procId -ErrorAction SilentlyContinue
-
-        # 检查进程名是否匹配        
-        if ($process -and $process.Name -eq $processName) { 
-            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-            $joinCommand = "open $externalJoinIP`:$localPort"          
-            #Write-Output "[$timestamp] 加入命令： $joinCommand. " 
-            if($joinCommand -notmatch "62169") {
-                $outputString = "`r`n[$timestamp] 游戏服务端已经启动，但检测端口发现不是默认的62169，如果你也没有修改过端口配置，【那可能是配置文件出问题了，去这个目录(..\Rumbleverse\Binaries\Win64\Config.ini)删除配置文件,关了当前窗口再开脚本试一次，还不行就运行 [服务器设置(改模式和等待时间).请先运行这个再开服.bat] 这个后再重新运行开服脚本.】 `r`n"
-                Write-Host $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-            }
-            break
-        }
-    }
-
-    
-
-    #获取服务端进程id,用来后面重开结束
-    if($isGetProcessId) {
-        return $procId
-    }
-    else {
-        return $joinCommand
-    }
-    # 调用示例
-    #Get-ListeningPortsByProcessName -processName "YourProcessName" -$externalJoinIP -isGetProcessId $true
-}
-
-
-
 
 while ($true) {
     $isRoundEnd = $false

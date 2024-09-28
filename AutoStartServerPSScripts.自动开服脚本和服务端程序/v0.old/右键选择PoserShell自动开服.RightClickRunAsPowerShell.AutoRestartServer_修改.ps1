@@ -1,0 +1,398 @@
+﻿# 如果无法执行ps脚本：以管理员身份运行powershell,执行下面的命令就可以了
+# Get-ExecutionPolicy -List
+# Set-ExecutionPolicy RemoteSigned
+
+# powershell -c "C:\RM_Data\R1\ServerInjectFiles.SQN.0917\右键选择PoserShell自动开服.RightClickRunAsPowerShell.AutoRestartServer.v3.62169.917.ps1"
+
+
+$gameRootPath = "$PSScriptRoot\..\"
+
+# 创建唯一的 main_log 文件名
+$timestamp = Get-Date -Format "yyyyMMddHHmmss"
+$mainLogFileName = "guardian_rumbleverse_log_${timestamp}.log"
+
+#$gameLogFolderPath = "${gameRootPath}\gameLogFolder" #C:\Users\limin\AppData\Local\Rumbleverse\Saved\Logs
+
+$userProfile = $env:USERPROFILE
+$gameLogFolderPath = "$userProfile\AppData\Local\Rumbleverse\Saved\Logs"
+
+$processName = "RumbleverseClient-Win64-Shipping"
+$guardian_rumbleverse_log = "$PSScriptRoot\logs\${mainLogFileName}"
+$rumbleverse_log = "$PSScriptRoot\logs\rumbleverse_server_game_log_before_${timestamp}.log"
+$controlFilePath = "${PSScriptRoot}\control.txt"
+
+$configFilePath = "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\Config.ini"
+
+
+#--------------------------端口号配置：目前还不支持修改，后续支持----------------------------#
+# 如果不是默认的端口号62169请修改下面的数字
+#$gamePort = 62169
+#----------------------------------------------------------------#
+
+#--------------------------切模式：----------------------------#
+#开哪个模式就把前面的#号去掉，其他的模式前面保持有#号表示不会生效，如果有多个模式生效则以最后一行的为准
+
+#各模式已合并成一个文件，通过配置文件来修改游戏模式，或者通过运行时传递参数的方式(还未实现)？
+#目前改模式的方式：双击打开当前目录的服务器设置.bat 来修改
+$gameModeFile = ".\Server.dll" 
+
+## 下面的是老的版本，按模式分开的，如果上面那个方式有问题，可以切换回下面老的版本的方式来运行
+# $gameModeFile = "$PSScriptRoot\v0.old\Solos.dll" #单排
+# $gameModeFile = "$PSScriptRoot\v0.old\Duos.dll" #双排
+# $gameModeFile = "$PSScriptRoot\v0.old\from.ed.git\BR_Trios.dll" #三排
+# $gameModeFile = "$PSScriptRoot\v0.old\from.ed.git\BR_Quads.dll" #四排
+# $gameModeFile = "$PSScriptRoot\v0.old\Playground.dll" #训练场
+
+
+#--------------------------自动切模式配置：目前还不支持修改，还有问题----------------------------#
+$enableAutoSwitchGameMode = $false  #默认未开启，改为$true表示 开启
+
+#0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排
+# 定义自动切换游戏模式的阈值变量
+$thresholdTraining = 4
+$thresholdSolo = 10
+$thresholdDuo = 19
+$thresholdTrio = 27
+
+#------------------------------------------------------#
+
+Write-Output "##### $timestamp #####" | Tee-Object -FilePath $guardian_rumbleverse_log
+
+Write-Output "gameRootPath: $gameRootPath" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+Write-Output "gameLogFolderPath: $gameLogFolderPath" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+Write-Output "[$timestamp]【有问题发这个日志文件出来】 自动开服和自动切模式完整日志文件guardian_rumbleverse_log路径：: $guardian_rumbleverse_log" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+Write-Output "controlFilePath: $controlFilePath,$configFilePath" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+#Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+$configContent = Get-Content -Path $configFilePath
+$currentGameMode = $configContent -match '游戏模式=(\d)'
+
+Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode  $configContent" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+
+function CreateFileOrDirectory {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [switch]$IsDirectory
+    )
+
+    $parentPath = Split-Path -Path $Path -Parent
+
+    if (-not (Test-Path -Path $parentPath)) {
+        New-Item -ItemType Directory -Path $parentPath | Out-Null
+        Write-Output "Created directory: $parentPath" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    }
+
+    if (-not (Test-Path -Path $Path)) {
+        if ($IsDirectory) {
+            New-Item -ItemType Directory -Path $Path | Out-Null
+            Write-Output "Created directory: $Path" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        }
+        else {
+            $null = New-Item -ItemType File -Path $Path
+            Write-Output "Created file: $Path" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        }
+    }
+    else {
+        Write-Output "Exists: $Path" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    }
+}
+
+function CheckLogFile {
+    $latestLogFile = Get-ChildItem -Path $GameLogFolderPath | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
+    $outputString = ""
+    if ($latestLogFile -and (Test-Path -Path $latestLogFile.FullName)) {
+        Write-Output "Log file found $latestLogFile." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        $logContent = Get-Content -Path $latestLogFile.FullName
+
+        #$teamLines = $logContent | Select-String -Pattern "Warning: Total Teams: (\d+)"    LogNet: Join succeeded: 258
+        #$lastTeamLine = $teamLines | Select-Object -Last 1     
+
+        ##Write-Output "[$timestamp] 找到队伍数量日志： $teamLines " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+        # if ($lastTeamLine) {
+        #     Write-Output "[$timestamp] 找到队伍数量最后一条日志(即当前队伍数量)： $lastTeamLine " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        # }
+
+        $userJoinedLogStrs = $logContent | Select-String -Pattern "LogNet: Join succeeded: (\d+)"
+        $ConnecteUserCount = $userJoinedLogStrs.Count
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        #Write-Output "[$timestamp] 找到用户加入日志： $userJoinedLogStrs " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        Write-Output "[$timestamp] 当前玩家数量：  $ConnecteUserCount " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+        if ($logContent -match "SheikErrorLog: Error: Source Client, System Login, CallCode Logout, ErrorCode -1") {
+
+            #$linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -First 1 
+            $linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -Last 1 
+            $linesWithRemoteAddr1 = [regex]::Match($logContent,'Error: Task_CreateParty::CozmoWorkCompleted - Cozmo work failed: Failed to create party for user (\w+-\w+)')
+            $pattern = "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+            $result = $linesWithRemoteAddr1.Groups[1].Value
+            $match = [regex]::Match($linesWithRemoteAddr, $pattern)
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Write-Output "[$timestamp] 炸服了，服务器异常退出了，如果是米西服，可能是有人在没有退出米西房前直接关闭游戏导致的，引起掉线的IP地址：$match 游戏昵称ID：$result" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Host "[$timestamp] 炸服了，服务器异常退出了，如果是米西服，可能是有人在没有退出米西房前直接关闭游戏导致的，引起掉线的IP地址：$match 游戏昵称ID：$result"
+            return "ServerUnliving_SheikErrorLog"
+        }
+        elseif ($logContent -match "Error: Task_CreateParty::CozmoWorkCompleted - Cozmo work failed: Failed to create party for user") {
+            $linesWithRemoteAddr = $logContent | Where-Object { $_ -match "RemoteAddr:" } | Select-Object -Last 1 
+            $linesWithRemoteAddr1 = [regex]::Match($logContent,'Error: Task_CreateParty::CozmoWorkCompleted - Cozmo work failed: Failed to create party for user (\w+-\w+)')
+            $pattern = "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+            $result = $linesWithRemoteAddr1.Groups[1].Value
+            $match = [regex]::Match($linesWithRemoteAddr, $pattern)
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Write-Output "[$timestamp]服务端异常退出, 可能是有人加入失败导致,引起掉线的IP地址：$match 游戏昵称ID：$result" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Host "[$timestamp]服务端异常退出, 可能是有人加入失败导致,引起掉线的IP地址：$match 游戏昵称ID：$result"
+            return "CreatePartyFailed"
+        }
+        elseif ($logContent -match "WBP_Sheik_ScreenEoM.WBP_Sheik_ScreenEOM_C:OnRoundFinished_cb") {
+            return "RoundFinished"
+        }
+        elseif ($enableAutoSwitchGameMode) {
+            
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            Write-Output "[$timestamp] 当前玩家数量 $ConnecteUserCount，进入自动切换模式判断。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+            #定义指定队伍数量的日志文本 #这个内容目前无法获取数量，一直为0，不要用这个了
+            #$searchContent = "Warning: Total Teams: $autoSwitchGameModeThreshold"
+           
+            # 读取配置文件内容
+            $configContent = Get-Content -Path $configFilePath
+
+            # 获取当前游戏模式
+            $currentGameMode = $configContent -match '游戏模式=(\d)'
+
+            Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+           
+            if ($ConnecteUserCount -ge $thresholdTrio) {
+                Write-Output "[$timestamp] 人数已达到四排设定人数 $thresholdTrio，下一局将自动切换到四排模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                $newContent = $configContent -replace '游戏模式=\d', '游戏模式=4'
+            }
+            elseif ($ConnecteUserCount -ge $thresholdDuo) {
+                Write-Output "[$timestamp] 人数已达到三排设定人数 $thresholdDuo，下一局将自动切换到三排模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                $newContent = $configContent -replace '游戏模式=\d', '游戏模式=3'
+            }
+            elseif ($ConnecteUserCount -ge $thresholdSolo) {
+                Write-Output "[$timestamp] 人数已达到双排设定人数 $thresholdSolo，下一局将自动切换到双排模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                $newContent = $configContent -replace '游戏模式=\d', '游戏模式=2'
+            }
+            elseif ($ConnecteUserCount -ge $thresholdTraining) {
+                Write-Output "[$timestamp] 人数已达到单排设定人数 $thresholdTraining，下一局将自动切换到单排模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                $newContent = $configContent -replace '游戏模式=\d', '游戏模式=1'
+            }
+            else {
+                Write-Output "[$timestamp] 人数少于 $thresholdTraining，下一局将自动切换到训练模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                $newContent = $configContent -replace '游戏模式=\d', '游戏模式=0'
+            }
+
+            # 将修改后的内容写回配置文件
+            Set-Content -Path $configFilePath -Value $configContent
+            $configContent = Get-Content -Path $configFilePath
+
+            Write-Output "[$timestamp] 配置文件 $configFilePath 已更新，内容：$newContent " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+           
+        }
+        else {
+            return $false
+        }
+    }
+    else {
+        Write-Output "Log file not found in $GameLogFolderPath." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        return $false
+    }
+}
+
+function CheckProcessRunning {
+    $process = Get-Process -Name $processName -ErrorAction SilentlyContinue
+    return $process -ne $null
+}
+
+function RestartGameServer {
+    $timestamp2 = Get-Date -Format "yyyyMMddHHmmss"
+
+    $latestLogFile = Get-ChildItem -Path $GameLogFolderPath | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
+    #Copy-Item -Path $latestLogFile -Destination $rumbleverse_log
+    $logContent = Get-Content -Path $latestLogFile.FullName
+    $rumbleverse_log = "$PSScriptRoot\logs\rumbleverse_server_game_log_before_${timestamp2}.log"
+    $logContent | Tee-Object -FilePath $rumbleverse_log -OutVariable logOutput | Out-Null
+    
+    Write-Output "[$timestamp2] 原始服务端游戏日志($GameLogFolderPath\$latestLogFile)已经保存到 $rumbleverse_log " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    
+    #Write-Output "当前模式为 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+    #Start-Process -FilePath "${gameRootPath}\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe" -ArgumentList "-log", "-nullrhi", "-notexturestreaming", "-threads 200", "-high", "-noaudio" -WindowStyle hidden # -PassThru
+    cd ${gameRootPath}
+    ##.\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe "-log" "-nullrhi" "-notexturestreaming" "-threads 200" "-high" "-noaudio" > ".\gameLogFolder\game_log_${timestamp2}.txt" 2>&1
+    .\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe "-log" "-nullrhi" "-windowed"
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Output "[$timestamp] RestartGameServer:done!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+
+    Start-Sleep -Seconds 20
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Output "[$timestamp] Setting process priority to High" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    $process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
+    if ($process) {
+        $process.PriorityClass = "High"
+    }
+
+    #Start-Sleep -Seconds 20
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Output "[$timestamp] Injecting DLL" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    #$arguments = '--process-name RumbleverseClient-Win64-Shipping.exe --inject ".\Rumbleverse\Binaries\Win64\Server.dll"'
+    #$arguments = '--process-name RumbleverseClient-Win64-Shipping.exe --inject "..\ServerInjectFiles\Solos.dll"'
+    #$arguments = "--process-name RumbleverseClient-Win64-Shipping.exe --inject `"$gameModeFile`""
+    #Write-Output "[$timestamp] Injecting arguments: $arguments" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+    #Start-Process -FilePath "${PSScriptRoot}\Injector2.exe" -ArgumentList $arguments
+    cd ${PSScriptRoot}
+    Write-Output "[$timestamp] .\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
+    #.\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile > $injectResult
+    $command = ".\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile"
+    $injectResult = cmd.exe /c $command
+
+    Write-Output "[$timestamp] injectResult： $injectResult" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
+    
+    $foundPort = $false
+    Start-Sleep -Seconds 12
+    $findCount = 0
+    
+    while (-not $foundPort) {  
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $filteredOutput = netstat -ano | Select-String "62169" #如果修改过默认端口请把脚本里面的62169改成对应的端口，否则 会检测不到已启来。
+        if (!(CheckProcessRunning)) {
+            $foundPort = $true
+            Write-Output "[$timestamp] RestartGameServer: Server Crash, Now auto Start Now(服务端崩溃了，重启中。。)!! " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        }
+        elseif ($filteredOutput) {
+            $foundPort = $true
+            Write-Output "[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]!! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        
+        }
+        else {
+            Write-Output "[$timestamp] RestartGameServer: Waiting Server Ready! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        
+            Start-Sleep -Seconds 2
+        }
+        $findCount = $findCount+1
+    }
+}
+
+while ($true) {
+    $isRoundEnd = $false
+
+    # 检查进程是否闪退
+    if (!(CheckProcessRunning)) {    
+        # 写入闪退日志
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $crashLog = "[$timestamp] Program not run or crash exit."       
+        Write-Output $crashLog | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+   
+        RestartGameServer        
+        continue
+    }
+   
+    $logCheckresult = CheckLogFile
+    if ($logCheckresult -eq "ServerUnliving_SheikErrorLog") {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Write-Output "[$timestamp] ServerUnliving_SheikErrorLog" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+   
+        Stop-Process -Name $processName -Force
+        Start-Sleep -Seconds 8
+        RestartGameServer
+        continue
+    } 
+    elseif ($logCheckresult -eq "CreatePartyFailed") {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Write-Output "[$timestamp] CreatePartyFailed" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+   
+        Stop-Process -Name $processName -Force
+        Start-Sleep -Seconds 8
+        RestartGameServer        
+        continue
+    } 
+    elseif ($logCheckresult -eq "RoundFinished") {
+        $isRoundEnd = $true 
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Write-Output "[$timestamp] 这一局已经正常结束,接下如果没有开启延迟20分钟重开则会自动结束服务端游戏进程重新开始,预计2分钟后可以起来(请先在控制台输入命令open Island_P_2进入单机模式以保留衣服，等起来后再加入.否则掉出来需要重启游戏客户端重新穿衣服). RoundFinished." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    } 
+    else {
+        Start-Sleep -Seconds 20
+    }
+   
+    # 检查控制文件
+    if (Test-Path $controlFilePath) {
+        # 读取控制文件的值
+        $controlValue = Get-Content -Path $controlFilePath
+   
+        # 判断控制值是否满足退出条件
+        if ($controlValue -like "*exit*") {
+            # 写入退出日志
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $exitLog = "[$timestamp] Program exited by user."
+            Write-Output $exitLog | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+   
+            # 退出脚本
+            break
+        }
+        elseif ($controlValue -like "*sleep*") {
+            Start-Sleep -Seconds 180
+            continue
+        }
+        elseif ($controlValue -like "*stop auto start*") {
+            # 写入退出日志
+            $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+            $exitLog = "[$timestamp] stop auto start new round by user."
+            Write-Output $exitLog | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+   
+            Start-Sleep -Seconds 180
+            continue
+        }
+        elseif ($controlValue -like "*delay auto start*") {
+            if ($isRoundEnd) {
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                Write-Output "[$timestamp] 已经开启延迟20分钟重开，目前是自由模式（要关闭请修改control.txt里面的内容改为：delay# auto start）。 delay 20 min auto start" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+                $isRerunging = $false
+                $startTime = Get-Date
+                while ((Get-Date) - $startTime -lt (New-TimeSpan -Minutes 20)) {                   
+                    Start-Sleep -Seconds 40
+                    if (!(CheckProcessRunning)) {    
+                        # 写入闪退日志
+                        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                        $crashLog = "[$timestamp] Program not run or crash exit during delay term."       
+                        Write-Output $crashLog | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+                        RestartGameServer    
+                        $isReRunging = $true    
+                        break
+                    }
+                    else {
+                        Start-Sleep -Seconds 30
+                    }
+                }
+                if (!$isReRunging -and (CheckProcessRunning)) {    
+                    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                    Write-Output "[$timestamp] now begin auto start in delay term" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                    Stop-Process -Name $processName -Force
+                    Start-Sleep -Seconds 3
+                    RestartGameServer        
+                }
+                continue
+            }
+        }
+        else {
+            if ($isRoundEnd) {                
+                Stop-Process -Name $processName -Force
+                Start-Sleep -Seconds 8
+                RestartGameServer        
+                continue
+            }
+            else {
+                # 默认处理逻辑
+            }
+        }
+    }  
+}
