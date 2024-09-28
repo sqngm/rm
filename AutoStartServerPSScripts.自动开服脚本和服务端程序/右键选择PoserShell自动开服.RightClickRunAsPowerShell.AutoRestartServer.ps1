@@ -38,11 +38,12 @@ $configFilePath = "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\Config.ini"
 #$gameModeFile = ".\Server.dll" 
 
 ## 下面的是老的版本，按模式分开的，如果上面那个方式有问题，可以切换回下面老的版本的方式来运行
+## 用老的版本需要进配置文件目录删除配置文件，否则 可能会变端口，路径:..\Rumbleverse\Binaries\Win64\Config.ini
 $gameModeFile = ".\v0.old\Solos.dll" #单排
-# $gameModeFile = "$PSScriptRoot\v0.old\Duos.dll" #双排
-# $gameModeFile = "$PSScriptRoot\v0.old\from.ed.git\BR_Trios.dll" #三排
-# $gameModeFile = "$PSScriptRoot\v0.old\from.ed.git\BR_Quads.dll" #四排
-# $gameModeFile = "$PSScriptRoot\v0.old\Playground.dll" #训练场
+# $gameModeFile = ".\v0.old\Duos.dll" #双排
+# $gameModeFile = ".\v0.old\from.ed.git\BR_Trios.dll" #三排
+# $gameModeFile = ".\v0.old\from.ed.git\BR_Quads.dll" #四排
+# $gameModeFile = ".\v0.old\Playground.dll" #训练场
 
 
 #--------------------------自动切模式配置：目前还不支持修改，还有问题----------------------------#
