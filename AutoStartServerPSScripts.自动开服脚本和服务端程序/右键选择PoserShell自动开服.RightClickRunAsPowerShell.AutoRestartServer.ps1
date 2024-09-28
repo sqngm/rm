@@ -3,7 +3,8 @@
 # Set-ExecutionPolicy RemoteSigned
 
 # powershell -c "C:\RM_Data\R1\ServerInjectFiles.SQN.0917\右键选择PoserShell自动开服.RightClickRunAsPowerShell.AutoRestartServer.v3.62169.917.ps1"
-
+# 修改编码，保证英文操作系统不乱码
+chcp 936
 
 $gameRootPath = "$PSScriptRoot\..\"
 
@@ -48,13 +49,22 @@ $gameModeFile = ".\v0.old\Solos.dll" #单排
 
 #--------------------------自动切模式配置：目前还不支持修改，还有问题----------------------------#
 $enableAutoSwitchGameMode = $false  #默认未开启，改为$true表示 开启
-$global:alreadyChangedConfigGameMode = $false #更新一次记录状态，以避免后续循环更新出问题，重启后会重置此变量为false
+$global:alreadyChangedConfigGameMode = $false #更新一次记录状态，以避免后续循环更新出问题，重启后会重置此变量为false。#目前这个没用到
+
+# 有效玩家数量，记录起来，用来判断 自动开服人数切模式
+$global:effectPyayerCounts = 0
 #0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排
 # 定义自动切换游戏模式的阈值变量
-$thresholdTraining = 0 
-$thresholdSolo = 1
-$thresholdDuo = 39
-$thresholdTrio = 40
+
+$thresholdTraining = 4
+$thresholdSolo = 10
+$thresholdDuo = 19
+$thresholdTrio = 27
+
+# $thresholdTraining = 0 
+# $thresholdSolo = 1
+# $thresholdDuo = 39
+# $thresholdTrio = 40
 
 #------------------------------------------------------#
 
@@ -71,7 +81,9 @@ $radminIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.Inter
 $joinPromptTxt = ""
 if ($mixiIPObject) {
     $externalIP = $mixiIPObject.IPv4Address
-    $joinPromptTxt ="[$timestamp] 当前为米西组网的方式来开服的，服务器名：$computerName ，米西IP: $externalIP (公网IP $realExternalIP)!" 
+    $joinPromptTxt ="[$timestamp] 当前为米西组网的方式来开服的，服务器名：$computerName ，米西IP: $externalIP (公网IP $realExternalIP)! 要加入此服，请先去mx16.com下载客户端，进入软件后点左边的手柄图标->动作游戏或其他游戏->加入房间。等显示IP和延迟就可以加入了。`r`n " 
+    $joinPromptTxt = $joinPromptTxt + "[$timestamp] 需要注意的是：如果一直获取不到IP或不显示延迟，请退出房间，或者 重启软件。`r`n" 
+    $joinPromptTxt = $joinPromptTxt + "[$timestamp] 需要注意的是：如果不玩游戏了，想退出游戏，请先退出 米西房间再关游戏，否则会导致游戏服务端异常退出，所有人都会掉线。" 
     Write-Output $joinPromptTxt | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 } 
 elseif ($radminIPObject) {
@@ -164,6 +176,11 @@ function CheckLogFile {
         if($enableAutoSwitchGameMode) {
             $outputString = "$outputString， 当前已经开启自动切换游戏模式，当0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排"
         }
+            
+        #取已发射后的人数作为准确 人数,保证只设置一次人数值
+        if($global:effectPyayerCounts -eq 0 -and $logContent -match "Display: Entering new game flow state: 3") {
+            $global:effectPyayerCounts =  $userJoinedCount
+        }
 
         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         Write-Host $outputString
@@ -210,35 +227,35 @@ function CheckLogFile {
                 Write-Host $outputString 
                
                 $needSwitchGameMode = $false
-                if (($ConnecteUserCount -ge $thresholdTrio) -and ($currentGameMode -notmatch "=4")) { 
+                if (($global:effectPyayerCounts -ge $thresholdTrio) -and ($currentGameMode -notmatch "=4")) { 
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到四排设定人数 $thresholdTrio，下一局将自动切换到四排模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString # 注入后上一行无法输出 到控制台窗口，所以需要再用这种方式输出 一次
                     $newContent = $configContent -replace '游戏模式=\d', '游戏模式=4'
                 }
-                elseif (($ConnecteUserCount -ge $thresholdDuo -and $ConnecteUserCount -lt $thresholdTrio) -and ($currentGameMode -notmatch "=3")) {
+                elseif (($global:effectPyayerCounts -ge $thresholdDuo -and $global:effectPyayerCounts -lt $thresholdTrio) -and ($currentGameMode -notmatch "=3")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到三排设定人数 $thresholdDuo，下一局将自动切换到三排模式。"
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
                     $newContent = $configContent -replace '游戏模式=\d', '游戏模式=3'
                 }
-                elseif (($ConnecteUserCount -ge $thresholdSolo -and $ConnecteUserCount -lt $thresholdDuo) -and ($currentGameMode -notmatch "=2")) {
+                elseif (($global:effectPyayerCounts -ge $thresholdSolo -and $global:effectPyayerCounts -lt $thresholdDuo) -and ($currentGameMode -notmatch "=2")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到双排设定人数 $thresholdSolo，下一局将自动切换到双排模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
                     $newContent = $configContent -replace '游戏模式=\d', '游戏模式=2'
                 }
-                elseif (($ConnecteUserCount -ge $thresholdTraining  -and $ConnecteUserCount -lt $thresholdSolo) -and ($currentGameMode -notmatch "=1")) {
+                elseif (($global:effectPyayerCounts -ge $thresholdTraining  -and $global:effectPyayerCounts -lt $thresholdSolo) -and ($currentGameMode -notmatch "=1")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到单排设定人数 $thresholdTraining，下一局将自动切换到单排模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
                     $newContent = $configContent -replace '游戏模式=\d', '游戏模式=1'
                 }
-                elseif (($ConnecteUserCount -lt $thresholdTraining) -and ($currentGameMode -notmatch "=0")) {
+                elseif (($global:effectPyayerCounts -lt $thresholdTraining) -and ($currentGameMode -notmatch "=0")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数少于 $thresholdTraining，下一局将自动切换到训练模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -294,6 +311,7 @@ function CheckProcessRunning {
 
 function RestartGameServer {
     $global:alreadyChangedConfigGameMode = $false
+    $global:effectPyayerCounts = 0
     $timestamp2 = Get-Date -Format "yyyyMMddHHmmss"
 
     $latestLogFile = Get-ChildItem -Path $GameLogFolderPath | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
@@ -365,12 +383,13 @@ function RestartGameServer {
         }
         elseif ($filteredOutput) {
             $foundPort = $true
-            Write-Output " `r`n[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]【连接命令：$filteredOutput)!!】" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Output "`r`n[$timestamp] $joinPromptTxt" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Output "`r`n[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]【连接命令：$filteredOutput)!!】" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
         }
         else {
             Write-Output " `r`n[$timestamp] RestartGameServer: Waiting Server Ready! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-        
+            
             Start-Sleep -Seconds 2
         }
         $findCount = $findCount + 1
