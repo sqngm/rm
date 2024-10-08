@@ -56,10 +56,15 @@ $global:effectPyayerCounts = 0
 #0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排
 # 定义自动切换游戏模式的阈值变量
 
-$thresholdTraining = 8
-$thresholdSolo = 18
-$thresholdDuo = 38
-$thresholdTrio = 40
+$thresholdTraining = 4
+$thresholdSolo = 10
+$thresholdDuo = 19
+$thresholdTrio = 27
+
+# $thresholdTraining = 8
+# $thresholdSolo = 18
+# $thresholdDuo = 38
+# $thresholdTrio = 40
 
 #------------------------------------------------------#
 
@@ -67,7 +72,7 @@ $thresholdTrio = 40
 $computerName = $env:COMPUTERNAME
 
 # 获取外网IP地址
-$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "http://ifconfig.me/ip").Trim()
+$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "https://ipv4.icanhazip.com/").Trim()
 
 #判断有没有米西IP
 $mixiIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "ZeroTier*" }
@@ -217,7 +222,7 @@ function CheckLogFile {
                 # 获取当前游戏模式
                 $currentGameMode = $configContent -match 'GameMode=(\d)'
     
-                $outputString = "[$timestamp]  `r`n 【已进入自动切换模式判断,仅当一局结束时才自动检测。暂时不支持从训练模式切换。】 当前游戏配置文件里面设置的最新模式为：$currentGameMode , 玩家人数为： $ConnecteUserCount  `r`n " 
+                $outputString = "[$timestamp]  `r`n 【已进入自动切换模式判断,仅当一局结束时才自动检测。】 当前游戏配置文件里面设置的最新模式为：$currentGameMode , 玩家人数为： $ConnecteUserCount  `r`n " 
                 Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                 Write-Host $outputString 
                
