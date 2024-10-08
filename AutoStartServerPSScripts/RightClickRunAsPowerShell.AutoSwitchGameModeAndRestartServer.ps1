@@ -106,9 +106,9 @@ Write-Output "controlFilePath: $controlFilePath,$configFilePath" | Tee-Object -F
 
 #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 $configContent = Get-Content -Path $configFilePath
-$currentGameMode = $configContent -match '游戏模式=(\d)'
+$currentGameMode = $configContent -match 'GameMode=(\d)'
 
-Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent `r`n 【游戏模式说明】 训练场 0，单排  1，双排 2，三排 3，四排 4" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
 
 function CreateFileOrDirectory {
@@ -158,11 +158,11 @@ function CheckLogFile {
         $outputString = "[$timestamp] 当前玩家数量：  $ConnecteUserCount "
 
         $configContent = Get-Content -Path $configFilePath
-        $currentGameMode = $configContent -match '游戏模式=(\d)'
+        $currentGameMode = $configContent -match 'GameMode=(\d)'
         #  Write-Host $currentGameMode
 
 
-        if ($currentGameMode -eq "游戏模式=0") {
+        if ($currentGameMode -eq "GameMode=0") {
             $global:effectPyayerCounts = $global:PreviousConnecteUserCount
             Write-Host "[$timestamp] 上一次监测的玩家数量： $global:effectPyayerCounts "
             $global:PreviousConnecteUserCount = $ConnecteUserCount #保存上一次监测的玩家数量
@@ -215,47 +215,47 @@ function CheckLogFile {
                 $configContent = Get-Content -Path $configFilePath
     
                 # 获取当前游戏模式
-                $currentGameMode = $configContent -match '游戏模式=(\d)'
+                $currentGameMode = $configContent -match 'GameMode=(\d)'
     
                 $outputString = "[$timestamp]  `r`n 【已进入自动切换模式判断,仅当一局结束时才自动检测。暂时不支持从训练模式切换。】 当前游戏配置文件里面设置的最新模式为：$currentGameMode , 玩家人数为： $ConnecteUserCount  `r`n " 
                 Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                 Write-Host $outputString 
                
                 $needSwitchGameMode = $false
-                if (($global:effectPyayerCounts -ge $thresholdTrio) -and ($currentGameMode -notmatch "游戏模式=4")) { 
+                if (($global:effectPyayerCounts -ge $thresholdTrio) -and ($currentGameMode -notmatch "GameMode=4")) { 
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到四排设定人数 $thresholdTrio，下一局将自动切换到四排模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString # 注入后上一行无法输出 到控制台窗口，所以需要再用这种方式输出 一次
-                    $newContent = $configContent -replace '游戏模式=\d', '游戏模式=4'
+                    $newContent = $configContent -replace 'GameMode=\d', 'GameMode=4'
                 }
-                elseif (($global:effectPyayerCounts -ge $thresholdDuo -and $global:effectPyayerCounts -lt $thresholdTrio) -and ($currentGameMode -notmatch "游戏模式=3")) {
+                elseif (($global:effectPyayerCounts -ge $thresholdDuo -and $global:effectPyayerCounts -lt $thresholdTrio) -and ($currentGameMode -notmatch "GameMode=3")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到三排设定人数 $thresholdDuo，下一局将自动切换到三排模式。"
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-                    $newContent = $configContent -replace '游戏模式=\d', '游戏模式=3'
+                    $newContent = $configContent -replace 'GameMode=\d', 'GameMode=3'
                 }
-                elseif (($global:effectPyayerCounts -ge $thresholdSolo -and $global:effectPyayerCounts -lt $thresholdDuo) -and ($currentGameMode -notmatch "游戏模式=2")) {
+                elseif (($global:effectPyayerCounts -ge $thresholdSolo -and $global:effectPyayerCounts -lt $thresholdDuo) -and ($currentGameMode -notmatch "GameMode=2")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到双排设定人数 $thresholdSolo，下一局将自动切换到双排模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-                    $newContent = $configContent -replace '游戏模式=\d', '游戏模式=2'
+                    $newContent = $configContent -replace 'GameMode=\d', 'GameMode=2'
                 }
-                elseif (($global:effectPyayerCounts -ge $thresholdTraining -and $global:effectPyayerCounts -lt $thresholdSolo) -and ($currentGameMode -notmatch "游戏模式=1")) {
+                elseif (($global:effectPyayerCounts -ge $thresholdTraining -and $global:effectPyayerCounts -lt $thresholdSolo) -and ($currentGameMode -notmatch "GameMode=1")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数已达到单排设定人数 $thresholdTraining，下一局将自动切换到单排模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-                    $newContent = $configContent -replace '游戏模式=\d', '游戏模式=1'
+                    $newContent = $configContent -replace 'GameMode=\d', 'GameMode=1'
                 }
-                elseif (($global:effectPyayerCounts -lt $thresholdTraining) -and ($currentGameMode -notmatch "游戏模式=0")) {
+                elseif (($global:effectPyayerCounts -lt $thresholdTraining) -and ($currentGameMode -notmatch "GameMode=0")) {
                     $needSwitchGameMode = $true
                     $outputString = "[$timestamp] 玩家人数少于 $thresholdTraining，下一局将自动切换到训练模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-                    $newContent = $configContent -replace '游戏模式=\d', '游戏模式=0'
+                    $newContent = $configContent -replace 'GameMode=\d', 'GameMode=0'
                 }
                 else {
                     $outputString = "[$timestamp] 当前模式不在预期设计的模式里面了，请联系牛子修改开服脚本。" 
@@ -272,7 +272,7 @@ function CheckLogFile {
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
 
-                    if ($currentGameMode -contains "游戏模式=0") {                          
+                    if ($currentGameMode -contains "GameMode=0") {                          
                     
                         $outputString = "[$timestamp] 当前模式为训练模式，一局50分钟后才会自动结束.但现在人数已经超过${thresholdTraining}人，将直接重启并开启多排模式。" 
                         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -330,9 +330,9 @@ function RestartGameServer {
         
     #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     $configContent = Get-Content -Path $configFilePath
-    $currentGameMode = $configContent -match '游戏模式=(\d)'
+    $currentGameMode = $configContent -match 'GameMode=(\d)'
     Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    if ($currentGameMode -eq "游戏模式=0") {
+    if ($currentGameMode -eq "GameMode=0") {
         $gameModeFile = ".\v0.old\Playground.dll"
        
     }
