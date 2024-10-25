@@ -354,20 +354,20 @@ function RestartGameServer {
 
     #Start-Sleep -Seconds 20
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Output "[$timestamp] Injecting DLL" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    #Write-Output "[$timestamp] Injecting DLL" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     #$arguments = '--process-name RumbleverseClient-Win64-Shipping.exe --inject ".\Rumbleverse\Binaries\Win64\Server.dll"'
     #$arguments = '--process-name RumbleverseClient-Win64-Shipping.exe --inject "..\ServerInjectFiles\Solos.dll"'
     #$arguments = "--process-name RumbleverseClient-Win64-Shipping.exe --inject `"$gameModeFile`""
     #Write-Output "[$timestamp] Injecting arguments: $arguments" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
     #Start-Process -FilePath "${PSScriptRoot}\Injector2.exe" -ArgumentList $arguments
-    cd ${PSScriptRoot}
-    Write-Output "[$timestamp] .\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
-    #.\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile > $injectResult
-    $command = ".\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile"
-    $injectResult = cmd.exe /c $command
+    # cd ${PSScriptRoot}
+    # Write-Output "[$timestamp] .\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
+    # #.\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile > $injectResult
+    # $command = ".\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile"
+    # $injectResult = cmd.exe /c $command
 
-    Write-Output "[$timestamp] injectResult： $injectResult" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
+    # Write-Output "[$timestamp] injectResult： $injectResult" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
     
     $foundPort = $false
     Start-Sleep -Seconds 12
