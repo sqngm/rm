@@ -6,7 +6,7 @@
 # 修改编码，保证英文操作系统不乱码
 chcp 936
 
-$gameRootPath = "$PSScriptRoot\..\"
+$gameRootPath = Resolve-Path "$PSScriptRoot\..\"
 
 # 创建唯一的 main_log 文件名
 $timestamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -56,23 +56,24 @@ $global:effectPyayerCounts = 0
 #0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排
 # 定义自动切换游戏模式的阈值变量
 
+$thresholdTraining = 8   #大于等于这个数改单排,少于这个数一半改训练场
+$thresholdSolo = 16      #大于等于这个数改双排
+$thresholdDuo = 38       #大于等于这个数改三排
+$thresholdTrio = 39      #大于等于这个数改四排
+
 $thresholdTraining = 4
 $thresholdSolo = 10
 $thresholdDuo = 19
 $thresholdTrio = 27
-
-# $thresholdTraining = 8
-# $thresholdSolo = 18
-# $thresholdDuo = 38
-# $thresholdTrio = 40
-
 #------------------------------------------------------#
 
 # 获取本机的机器名
 $computerName = $env:COMPUTERNAME
 
-# 获取外网IP地址
-$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "https://ipv4.icanhazip.com/").Trim()
+# 获取外网IP地址，三个都可以，如果第一个有问题或者慢可以用后面两个，在powershell窗口里面直接输入括号里面的来测试
+$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "https://who.nie.netease.com/").ip.Trim()
+#$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "https://ipv4.icanhazip.com/").Trim()
+#$externalIP = $realExternalIP = (Invoke-RestMethod -Uri "http://ifconfig.me/ip").Trim()
 
 #判断有没有米西IP
 $mixiIPObject = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like "ZeroTier*" }
@@ -173,7 +174,20 @@ function CheckLogFile {
             $global:PreviousConnecteUserCount = $ConnecteUserCount #保存上一次监测的玩家数量
         }
         if ($enableAutoSwitchGameMode) {
-            $outputString = "$outputString， 当前已经开启自动切换游戏模式，当0到${thresholdTraining}人时开训练模式，${thresholdTraining}到${thresholdSolo}人单排，${thresholdSolo}到${thresholdDuo}人双排，${thresholdDuo}到${thresholdTrio}人三排，${thresholdTrio}人以上四排"
+            $outputString = "$outputString， 当前已经开启自动切换游戏模式，当0到$($thresholdTraining / 2)人时开训练模式，${thresholdTraining}到${thresholdSolo}人单排，${thresholdSolo}到${thresholdDuo}人双排，${thresholdDuo}到${thresholdTrio}人三排，${thresholdTrio}人以上四排"
+            
+            if(($ConnecteUserCount -ge $thresholdTraining) -and ($currentGameMode -eq "GameMode=0")) {
+                $global:effectPyayerCounts = $global:PreviousConnecteUserCount
+                 Write-Host "[$timestamp] 上一次监测的玩家数量： $global:effectPyayerCounts "
+                 $global:PreviousConnecteUserCount = $ConnecteUserCount #保存上一次监测的玩家数量
+                 $newContent = $configContent -replace 'GameMode=\d', 'GameMode=1'
+                 Set-Content -Path $configFilePath -Value $newContent
+                 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                 $outputString = $outputString + "`n`r" + "[$timestamp] 玩家人数已达到单排设定人数 $thresholdTraining，下一局将自动切换到单排模式。" 
+                 Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+                 Write-Host $outputString
+                 return "够人单排了"
+            }
         }
             
         #取已发射后的人数作为准确 人数,保证只设置一次人数值
@@ -208,7 +222,7 @@ function CheckLogFile {
             Write-Host "[$timestamp]服务端异常退出, 可能是有人加入失败导致,引起掉线的IP地址：$match 游戏昵称ID：$result"
             return "CreatePartyFailed"
         }
-        elseif ($logContent -match "WBP_Sheik_ScreenEoM.WBP_Sheik_ScreenEOM_C:OnRoundFinished_cb") {
+        elseif ($logContent -match "WBP_Sheik_ScreenEoM.WBP_Sheik_ScreenEOM_C:OnRoundFinished_cb" -or $logContent -match "SheikAILog: Disabling RingNavInvoker") {
 
             if ($enableAutoSwitchGameMode) {
             
@@ -217,10 +231,10 @@ function CheckLogFile {
                 #$searchContent = "Warning: Total Teams: $autoSwitchGameModeThreshold"
                
                 # 读取配置文件内容
-                $configContent = Get-Content -Path $configFilePath
+                #    $configContent = Get-Content -Path $configFilePath
     
                 # 获取当前游戏模式
-                $currentGameMode = $configContent -match 'GameMode=(\d)'
+                #   $currentGameMode = $configContent -match 'GameMode=(\d)'
     
                 $outputString = "[$timestamp]  `r`n 【已进入自动切换模式判断,仅当一局结束时才自动检测。】 当前游戏配置文件里面设置的最新模式为：$currentGameMode , 玩家人数为： $ConnecteUserCount  `r`n " 
                 Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -255,9 +269,9 @@ function CheckLogFile {
                     Write-Host $outputString
                     $newContent = $configContent -replace 'GameMode=\d', 'GameMode=1'
                 }
-                elseif (($global:effectPyayerCounts -lt $thresholdTraining) -and ($currentGameMode -notmatch "GameMode=0")) {
+                elseif (($global:effectPyayerCounts -lt ($thresholdTraining / 2)) -and ($currentGameMode -notmatch "GameMode=0")) {
                     $needSwitchGameMode = $true
-                    $outputString = "[$timestamp] 玩家人数少于 $thresholdTraining，下一局将自动切换到训练模式。" 
+                    $outputString = "[$timestamp] 玩家人数少于 $($thresholdTraining / 2)，下一局将自动切换到训练模式。" 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
                     $newContent = $configContent -replace 'GameMode=\d', 'GameMode=0'
@@ -276,7 +290,6 @@ function CheckLogFile {
                     $outputString = "[$timestamp] 配置文件 $configFilePath 已更新，内容：$newContent ." 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-
                     if ($currentGameMode -contains "GameMode=0") {                          
                     
                         $outputString = "[$timestamp] 当前模式为训练模式，一局50分钟后才会自动结束.但现在人数已经超过${thresholdTraining}人，将直接重启并开启多排模式。" 
@@ -305,7 +318,8 @@ function CheckLogFile {
 }
 
 function CheckProcessRunning {
-    $process = Get-Process -Name $processName -ErrorAction SilentlyContinue
+    # $process = Get-Process -Name $processName -ErrorAction SilentlyContinue
+    $process = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($gameRootPath) } | Sort-Object StartTime -Descending | Select-Object -First 1
     return $process -ne $null
 }
 
@@ -348,7 +362,8 @@ function RestartGameServer {
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Output "[$timestamp] Setting process priority to High" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    $process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
+    #$process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
+    $process = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $true
     if ($process) {
         $process.PriorityClass = "High"
     }
@@ -380,17 +395,20 @@ function RestartGameServer {
         #$filteredOutput = netstat -ano | Select-String "62169" #如果修改过默认端口请把脚本里面的62169改成对应的端口，否则 会检测不到已启来。
         
         #根据进程名去找监听端口，非常准确 
-        $filteredOutput = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $false
+        $result = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $false
         if (!(CheckProcessRunning)) {
             $foundPort = $true
             Write-Output " `r`n[$timestamp] RestartGameServer: Server Crash, Now auto Start Now(服务端崩溃了，重启中。。)!! " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         }
-        elseif ($filteredOutput) {
+        elseif ($result.JoinCommand) {
             $foundPort = $true
-            Write-Output "`r`n[$timestamp] $joinPromptTxt" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-            Write-Output "`r`n[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]【连接命令：$filteredOutput)!!】" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-        
+            Write-Output "`r`n[$timestamp] RestartGameServer: Server is living,You can connect now[服务端已启动，可以开始连接了！]【连接命令：$($result.JoinCommand))!!】" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            if ($result.WarningMessage) {
+                Write-Output $result.WarningMessage | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            }
         }
+
+        
         else {
             Write-Output " `r`n[$timestamp] RestartGameServer: Waiting Server Ready! [$filteredOutput]" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
             
@@ -412,14 +430,12 @@ function Stop-ProcessInDirectory {
     )
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"   
-    Stop-Process -Name $processName
-    return 
+    #    Stop-Process -Name $processName
+    #   return 
     ##下面的还有问题
     
     # 获取特定目录下的进程
-    $process = Get-Process -Name $processName | Where-Object {
-        $_.Path -match "$directory" -and $_.Name -eq $processName
-    } | Select-Object -First 1
+    $process = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($directory) } | Sort-Object StartTime -Descending | Select-Object -First 1
 
     # 停止该进程
     if ($process) {
@@ -427,7 +443,7 @@ function Stop-ProcessInDirectory {
         Write-Output "[$timestamp] Process in $directory stopped successfully." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     }
     else {
-        Write-Output "[$timestamp] No matching process found in $directory." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        Write-Output "[$timestamp] No matching process found in $directory. Start Force stop all $processName" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         Stop-Process -Name $processName -Force 
     }
 }
@@ -439,6 +455,7 @@ function Get-ListeningPortsByProcessName {
         [bool]$isGetProcessId = $false
     )
 
+<#    
     $listeningPorts = Get-NetUDPEndpoint -LocalAddress "0.0.0.0"
     $procId = 0
     $joinCommand = ""
@@ -460,18 +477,43 @@ function Get-ListeningPortsByProcessName {
             break
         }
     }
+#>
+    #通过路径获取服务器端进程并且获取端口
+    $process = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($gameRootPath) } | Sort-Object StartTime -Descending | Select-Object -First 1
 
-    
+    if ($process) {
+        $listeningPorts = Get-NetUDPEndpoint -LocalAddress "0.0.0.0" | Where-Object { $_.OwningProcess -eq $process.Id }
+        $listeningPort = $listeningPorts | Select-Object -ExpandProperty LocalPort
+        
+        if($listeningPort -ne $null) {
+            $joinCommand = "open $externalJoinIP`:$listeningPort"
+            Write-Output "[$timestamp] Process $processName is listening on port $listeningPort.1" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            Write-Host "[$timestamp] Process $processName is listening on port $listeningPort.2" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+            if ($joinCommand -notmatch "62169") {
+                $warningMessage = "`r`n[$timestamp] 游戏服务端已经启动，但检测端口发现不是默认的62169，如果你也没有修改过端口配置，【那可能是配置文件出问题了，去这个目录(..\Rumbleverse\Binaries\Win64\Config.ini)删除配置文件,关了当前窗口再开脚本试一次，还不行就运行 [服务器设置(改模式和等待时间).请先运行这个再开服.bat] 这个后再重新运行开服脚本.】 `r`n"
 
-    #获取服务端进程id,用来后面重开结束
-    if ($isGetProcessId) {
-        return $procId
-    }
+            }
+        }
+        else {   
+            Write-Output "[$timestamp] process not listening any udp port." | Tee-Object -FilePath $guardian_rumbleverse_log -Append         
+        }
+        #获取服务端进程id,用来后面重开结束
+        if ($isGetProcessId) {
+            return $process
+        }
+        else {
+            return @{
+                JoinCommand = $joinCommand
+                WarningMessage = $warningMessage
+            }
+        }
+    } 
     else {
-        return $joinCommand
-    }
-    # 调用示例
-    #Get-ListeningPortsByProcessName -processName "YourProcessName" -$externalJoinIP -isGetProcessId $true
+        Write-Output "[$timestamp] No matching process found." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+
+    }      
+    # 获取进程信息 调用示例
+    #Get-ListeningPortsByProcessName -processName "YourProcessName" -externalJoinIP $externalIP -isGetProcessId $true
 }
 
 
@@ -515,6 +557,14 @@ while ($true) {
         $isRoundEnd = $true 
         $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         Write-Output "[$timestamp] 这一局已经正常结束,接下如果没有开启延迟10分钟重开则会自动结束服务端游戏进程重新开始,预计2分钟后可以起来(请先在控制台输入命令open Island_P_2进入单机模式以保留衣服，等起来后再加入.否则掉出来需要重启游戏客户端重新穿衣服). RoundFinished." | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    }   
+    elseif ($logCheckresult -eq "够人单排了") {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Write-Output "[$timestamp] 够人单排了" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
+        Start-Sleep -Seconds 5
+        RestartGameServer        
+        continue
     }     
     elseif ($logCheckresult -eq "restartNow") {
         Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
