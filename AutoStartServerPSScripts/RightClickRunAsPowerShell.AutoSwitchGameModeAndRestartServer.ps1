@@ -193,7 +193,7 @@ function CheckLogFile {
         #取已发射后的人数作为准确 人数,保证只设置一次人数值
         if ($global:effectPyayerCounts -eq 0 -and $logContent -match "Display: Entering new game flow state: 3") {
             $global:effectPyayerCounts = $ConnecteUserCount
-            $outputString = "[$timestamp] 发射玩家数量：  $ConnecteUserCount "
+            $outputString = "[$timestamp] 游戏已经正式开始(已经发射)，当前发射时玩家数量：  $ConnecteUserCount "
         }
 
         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -290,7 +290,7 @@ function CheckLogFile {
                     $outputString = "[$timestamp] 配置文件 $configFilePath 已更新，内容：$newContent ." 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-                    if ($currentGameMode -contains "GameMode=0") {                          
+                    if ($currentGameMode -match "GameMode=0") {                          
                     
                         $outputString = "[$timestamp] 当前模式为训练模式，一局50分钟后才会自动结束.但现在人数已经超过${thresholdTraining}人，将直接重启并开启多排模式。" 
                         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -352,10 +352,10 @@ function RestartGameServer {
     $configContent = Get-Content -Path $configFilePath
     $currentGameMode = $configContent -match 'GameMode=(\d)'
     Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    if ($currentGameMode -eq "GameMode=0") {
-        $gameModeFile = ".\v0.old\Playground.dll"
+    # if ($currentGameMode -eq "GameMode=0") {
+    #     $gameModeFile = ".\v0.old\Playground.dll"
        
-    }
+    # }
 
 
     Start-Sleep -Seconds 20
@@ -365,6 +365,7 @@ function RestartGameServer {
     #$process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
     $process = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $true
     if ($process) {
+        Write-Output $process
         $process.PriorityClass = "High"
     }
 
