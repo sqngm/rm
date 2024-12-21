@@ -61,7 +61,7 @@ $thresholdSolo = 16      #大于等于这个数改双排
 $thresholdDuo = 38       #大于等于这个数改三排
 $thresholdTrio = 39      #大于等于这个数改四排
 
-$thresholdTraining = 4
+$thresholdTraining = 6
 $thresholdSolo = 10
 $thresholdDuo = 19
 $thresholdTrio = 27
@@ -353,12 +353,18 @@ function RestartGameServer {
     $currentGameMode = $configContent -match 'GameMode=(\d)'
     Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     if ($currentGameMode -eq "GameMode=0") {
-        $gameModeFile = ".\v0.old\Playground.dll"
+        ## 当前最新版的训练模式比较好用，固定了人机在水池。
+        ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
+        ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
+        ## 但是训练场却不是最好的版本，所以训练场改用最新版
+        $gameModeFile = ".\202412.02.cn\Server.dll" 
+        #$gameModeFile = ".\v0.old\Playground.dll"
+        Write-Output "[$timestamp] 当前服务文件路径为（当前最新12.02版的训练模式比较好用，固定了人机在水池。）： $gameModeFile "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
        
     }
 
 
-    Start-Sleep -Seconds 20
+    Start-Sleep -Seconds 40
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Output "[$timestamp] Setting process priority to High" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
