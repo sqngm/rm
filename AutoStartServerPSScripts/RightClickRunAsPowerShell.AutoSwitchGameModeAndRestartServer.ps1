@@ -36,7 +36,7 @@ $configFilePath = "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\Config.ini"
 
 #各模式已合并成一个文件，通过配置文件来修改游戏模式，或者通过运行时传递参数的方式(还未实现)？
 #目前改模式的方式：双击打开当前目录的服务器设置.bat 来修改
-$gameModeFile = ".\Server.dll" 
+$gameModeFile = ".\Server.dll" ## 国际版采用的是内置注入了。不需要了
 
 ## 下面的是老的版本，按模式分开的，如果上面那个方式有问题，可以切换回下面老的版本的方式来运行
 ## 用老的版本需要进配置文件目录删除配置文件，否则 可能会变端口，路径:..\Rumbleverse\Binaries\Win64\Config.ini
@@ -50,7 +50,7 @@ $gameModeFile = ".\Server.dll"
 #--------------------------自动切模式配置：目前还不支持修改，还有问题----------------------------#
 $enableAutoSwitchGameMode = $true  #默认未开启，改为$true表示 开启
 $global:alreadyChangedConfigGameMode = $false #更新一次记录状态，以避免后续循环更新出问题，重启后会重置此变量为false。#目前这个没用到
-
+$global:PreviousConnecteUserCount = 1
 # 有效玩家数量，记录起来，用来判断 自动开服人数切模式
 $global:effectPyayerCounts = 0
 #0到3人时开训练模式，4到9人单排，10到18人双排，19到27人三排，27人以上四排
@@ -337,6 +337,26 @@ function RestartGameServer {
     Write-Output "[$timestamp2] 原始服务端游戏日志($GameLogFolderPath\$latestLogFile)已经保存到 $rumbleverse_log " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     
     #Write-Output "当前模式为 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+          
+    #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    $configContent = Get-Content -Path $configFilePath
+    $currentGameMode = $configContent -match 'GameMode=(\d)'
+    Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    if ($currentGameMode -eq "GameMode=0") {
+        ## 当前最新版的训练模式比较好用，固定了人机在水池。
+        ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
+        ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
+        ## 但是训练场却不是最好的版本，所以训练场改用最新版
+        #$gameModeFile = ".\202412.02.cn\Server.dll" #国际版不需要这个了。内置了注入
+        Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+        Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+       
+    }
+    else {
+        Copy-Item -Path "$PSScriptRoot\202411.11.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+        Write-Output "[$timestamp] 当前服务文件路径为（当前最新202411.11.cn版的大逃杀模式比较好用，机器人不会跳海。） "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+       
+    }
 
     Start-Process -FilePath "${gameRootPath}\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe" -ArgumentList "-log", "-nullrhi", "-notexturestreaming", "-threads 200", "-high", "-noaudio" -WindowStyle hidden # -PassThru
    
@@ -347,55 +367,34 @@ function RestartGameServer {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Output "`r`n[$timestamp] RestartGameServer:done!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
-        
-    #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    $configContent = Get-Content -Path $configFilePath
-    $currentGameMode = $configContent -match 'GameMode=(\d)'
-    Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    if ($currentGameMode -eq "GameMode=0") {
-        ## 当前最新版的训练模式比较好用，固定了人机在水池。
-        ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
-        ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
-        ## 但是训练场却不是最好的版本，所以训练场改用最新版
-        $gameModeFile = ".\202412.02.cn\Server.dll" 
-        #$gameModeFile = ".\v0.old\Playground.dll"
-        Write-Output "[$timestamp] 当前服务文件路径为（当前最新12.02版的训练模式比较好用，固定了人机在水池。）： $gameModeFile "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-       
-    }
-    else {
-        $gameModeFile = ".\Server.dll" 
-        Write-Output "[$timestamp] 当前服务文件路径为（当前最新12.02版的训练模式比较好用，固定了人机在水池。）： $gameModeFile "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-       
-    }
-
-
-    Start-Sleep -Seconds 40
+    Start-Sleep -Seconds 20
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Output "[$timestamp] Setting process priority to Realtime" | Tee-Object -FilePath $guardian_rumbleverse_log -Append #可降低延迟
+    Write-Output "[$timestamp] Setting process priority to High" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     #$process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
     $process = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $true
     Write-Output "[$timestamp] Get-ListeningPortsByProcessName: $process " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     # if ($process) {
-    #     $process.PriorityClass = "Realtime"
+    #     Write-Output $process
+    #     $process.PriorityClass = "High"
     # }
 
     #Start-Sleep -Seconds 20
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Output "[$timestamp] Injecting DLL" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    #Write-Output "[$timestamp] Injecting DLL" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     #$arguments = '--process-name RumbleverseClient-Win64-Shipping.exe --inject ".\Rumbleverse\Binaries\Win64\Server.dll"'
     #$arguments = '--process-name RumbleverseClient-Win64-Shipping.exe --inject "..\ServerInjectFiles\Solos.dll"'
     #$arguments = "--process-name RumbleverseClient-Win64-Shipping.exe --inject `"$gameModeFile`""
     #Write-Output "[$timestamp] Injecting arguments: $arguments" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
     #Start-Process -FilePath "${PSScriptRoot}\Injector2.exe" -ArgumentList $arguments
-    cd ${PSScriptRoot}
-    Write-Output "[$timestamp] .\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
-    #.\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile > $injectResult
-    $command = ".\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile"
-    $injectResult = cmd.exe /c $command
+    # cd ${PSScriptRoot}
+    # Write-Output "[$timestamp] .\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
+    # #.\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile > $injectResult
+    # $command = ".\Injector2.exe --process-name RumbleverseClient-Win64-Shipping.exe --inject $gameModeFile"
+    # $injectResult = cmd.exe /c $command
 
-    Write-Output "[$timestamp] injectResult： $injectResult" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
+    # Write-Output "[$timestamp] injectResult： $injectResult" | Tee-Object -FilePath $guardian_rumbleverse_log -Append 
     
     $foundPort = $false
     Start-Sleep -Seconds 12
