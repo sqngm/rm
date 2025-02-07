@@ -337,6 +337,26 @@ function RestartGameServer {
     Write-Output "[$timestamp2] 原始服务端游戏日志($GameLogFolderPath\$latestLogFile)已经保存到 $rumbleverse_log " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     
     #Write-Output "当前模式为 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+          
+    #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    $configContent = Get-Content -Path $configFilePath
+    $currentGameMode = $configContent -match 'GameMode=(\d)'
+    Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    if ($currentGameMode -eq "GameMode=0") {
+        ## 当前最新版的训练模式比较好用，固定了人机在水池。
+        ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
+        ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
+        ## 但是训练场却不是最好的版本，所以训练场改用最新版
+        #$gameModeFile = ".\202412.02.cn\Server.dll" #国际版不需要这个了。内置了注入
+        Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+        Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+       
+    }
+    else {
+        Copy-Item -Path "$PSScriptRoot\202411.11.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+        Write-Output "[$timestamp] 当前服务文件路径为（当前最新202411.11.cn版的大逃杀模式比较好用，机器人不会跳海。） "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+       
+    }
 
     Start-Process -FilePath "${gameRootPath}\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe" -ArgumentList "-log", "-nullrhi", "-notexturestreaming", "-threads 200", "-high", "-noaudio" -WindowStyle hidden # -PassThru
    
@@ -347,27 +367,17 @@ function RestartGameServer {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Output "`r`n[$timestamp] RestartGameServer:done!" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
 
-        
-    #Write-Output "当前模式 gameModeFile: $gameModeFile  | 包含Solos为单排,Duos双排， Trios为三排，Quads为四排，Playground为训练场" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    $configContent = Get-Content -Path $configFilePath
-    $currentGameMode = $configContent -match 'GameMode=(\d)'
-    Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    # if ($currentGameMode -eq "GameMode=0") {
-    #     $gameModeFile = ".\v0.old\Playground.dll"
-       
-    # }
-
-
     Start-Sleep -Seconds 20
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Write-Output "[$timestamp] Setting process priority to High" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     #$process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
     $process = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $true
-    if ($process) {
-        Write-Output $process
-        $process.PriorityClass = "High"
-    }
+    Write-Output "[$timestamp] Get-ListeningPortsByProcessName: $process " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    # if ($process) {
+    #     Write-Output $process
+    #     $process.PriorityClass = "High"
+    # }
 
     #Start-Sleep -Seconds 20
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -483,6 +493,7 @@ function Get-ListeningPortsByProcessName {
     $process = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($gameRootPath) } | Sort-Object StartTime -Descending | Select-Object -First 1
 
     if ($process) {
+        $process.PriorityClass = "Realtime"
         $listeningPorts = Get-NetUDPEndpoint -LocalAddress "0.0.0.0" | Where-Object { $_.OwningProcess -eq $process.Id }
         $listeningPort = $listeningPorts | Select-Object -ExpandProperty LocalPort
         
