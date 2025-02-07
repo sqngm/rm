@@ -193,7 +193,7 @@ function CheckLogFile {
         #取已发射后的人数作为准确 人数,保证只设置一次人数值
         if ($global:effectPyayerCounts -eq 0 -and $logContent -match "Display: Entering new game flow state: 3") {
             $global:effectPyayerCounts = $ConnecteUserCount
-            $outputString = "[$timestamp] 发射玩家数量：  $ConnecteUserCount "
+            $outputString = "[$timestamp] 游戏已经正式开始(已经发射)，当前发射时玩家数量：  $ConnecteUserCount "
         }
 
         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -290,7 +290,7 @@ function CheckLogFile {
                     $outputString = "[$timestamp] 配置文件 $configFilePath 已更新，内容：$newContent ." 
                     Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
                     Write-Host $outputString
-                    if ($currentGameMode -contains "GameMode=0") {                          
+                    if ($currentGameMode -match "GameMode=0") {                          
                     
                         $outputString = "[$timestamp] 当前模式为训练模式，一局50分钟后才会自动结束.但现在人数已经超过${thresholdTraining}人，将直接重启并开启多排模式。" 
                         Write-Output $outputString | Tee-Object -FilePath $guardian_rumbleverse_log -Append
@@ -362,17 +362,23 @@ function RestartGameServer {
         Write-Output "[$timestamp] 当前服务文件路径为（当前最新12.02版的训练模式比较好用，固定了人机在水池。）： $gameModeFile "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
        
     }
+    else {
+        $gameModeFile = ".\Server.dll" 
+        Write-Output "[$timestamp] 当前服务文件路径为（当前最新12.02版的训练模式比较好用，固定了人机在水池。）： $gameModeFile "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+       
+    }
 
 
     Start-Sleep -Seconds 40
 
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Write-Output "[$timestamp] Setting process priority to High" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    Write-Output "[$timestamp] Setting process priority to Realtime" | Tee-Object -FilePath $guardian_rumbleverse_log -Append #可降低延迟
     #$process = Get-Process -Name "RumbleverseClient-Win64-Shipping" -ErrorAction SilentlyContinue
     $process = Get-ListeningPortsByProcessName -processName $processName -externalJoinIP $externalIP -isGetProcessId $true
-    if ($process) {
-        $process.PriorityClass = "High"
-    }
+    Write-Output "[$timestamp] Get-ListeningPortsByProcessName: $process " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+    # if ($process) {
+    #     $process.PriorityClass = "Realtime"
+    # }
 
     #Start-Sleep -Seconds 20
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -488,6 +494,7 @@ function Get-ListeningPortsByProcessName {
     $process = Get-Process -Name $processName -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($gameRootPath) } | Sort-Object StartTime -Descending | Select-Object -First 1
 
     if ($process) {
+        $process.PriorityClass = "Realtime"
         $listeningPorts = Get-NetUDPEndpoint -LocalAddress "0.0.0.0" | Where-Object { $_.OwningProcess -eq $process.Id }
         $listeningPort = $listeningPorts | Select-Object -ExpandProperty LocalPort
         
