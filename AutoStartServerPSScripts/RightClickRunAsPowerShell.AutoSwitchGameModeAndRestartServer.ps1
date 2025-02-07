@@ -6,6 +6,7 @@
 # 修改编码，保证英文操作系统不乱码
 chcp 936
 
+$isGlobalVersion = $true ## 是否为国际版，ed版
 $gameRootPath = Resolve-Path "$PSScriptRoot\..\"
 
 # 创建唯一的 main_log 文件名
@@ -48,7 +49,7 @@ $gameModeFile = ".\Server.dll" ## 国际版采用的是内置注入了。不需�
 
 
 #--------------------------自动切模式配置：目前还不支持修改，还有问题----------------------------#
-$enableAutoSwitchGameMode = $true  #默认未开启，改为$true表示 开启
+$global:enableAutoSwitchGameMode = $false  #默认未开启，改为$true表示 开启
 $global:alreadyChangedConfigGameMode = $false #更新一次记录状态，以避免后续循环更新出问题，重启后会重置此变量为false。#目前这个没用到
 $global:PreviousConnecteUserCount = 1
 # 有效玩家数量，记录起来，用来判断 自动开服人数切模式
@@ -173,7 +174,7 @@ function CheckLogFile {
             Write-Host "[$timestamp] 上一次监测的玩家数量： $global:effectPyayerCounts "
             $global:PreviousConnecteUserCount = $ConnecteUserCount #保存上一次监测的玩家数量
         }
-        if ($enableAutoSwitchGameMode) {
+        if ($global:enableAutoSwitchGameMode) {
             $outputString = "$outputString， 当前已经开启自动切换游戏模式，当0到$($thresholdTraining / 2)人时开训练模式，${thresholdTraining}到${thresholdSolo}人单排，${thresholdSolo}到${thresholdDuo}人双排，${thresholdDuo}到${thresholdTrio}人三排，${thresholdTrio}人以上四排"
             
             if(($ConnecteUserCount -ge $thresholdTraining) -and ($currentGameMode -eq "GameMode=0")) {
@@ -224,7 +225,7 @@ function CheckLogFile {
         }
         elseif ($logContent -match "WBP_Sheik_ScreenEoM.WBP_Sheik_ScreenEOM_C:OnRoundFinished_cb" -or $logContent -match "SheikAILog: Disabling RingNavInvoker") {
 
-            if ($enableAutoSwitchGameMode) {
+            if ($global:enableAutoSwitchGameMode) {
             
                 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
                 #定义指定队伍数量的日志文本 #这个内容目前无法获取数量，一直为0，不要用这个了
@@ -342,7 +343,11 @@ function RestartGameServer {
     $configContent = Get-Content -Path $configFilePath
     $currentGameMode = $configContent -match 'GameMode=(\d)'
     Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-    if ($currentGameMode -eq "GameMode=0") {
+    if($isGlobalVersion) {
+        
+    }
+    else {
+        if ($currentGameMode -eq "GameMode=0") {
         ## 当前最新版的训练模式比较好用，固定了人机在水池。
         ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
         ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
@@ -351,12 +356,14 @@ function RestartGameServer {
         Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
         Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
        
+        }
+        else {
+            Copy-Item -Path "$PSScriptRoot\202411.11.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+            Write-Output "[$timestamp] 当前服务文件路径为（当前最新202411.11.cn版的大逃杀模式比较好用，机器人不会跳海。） "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        
+        }
     }
-    else {
-        Copy-Item -Path "$PSScriptRoot\202411.11.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
-        Write-Output "[$timestamp] 当前服务文件路径为（当前最新202411.11.cn版的大逃杀模式比较好用，机器人不会跳海。） "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-       
-    }
+    
 
     Start-Process -FilePath "${gameRootPath}\Rumbleverse\Binaries\Win64\RumbleverseClient-Win64-Shipping.exe" -ArgumentList "-log", "-nullrhi", "-notexturestreaming", "-threads 200", "-high", "-noaudio" -WindowStyle hidden # -PassThru
    
@@ -605,6 +612,14 @@ while ($true) {
         }
         elseif ($controlValue -like "*sleep*") {
             Start-Sleep -Seconds 180
+            continue
+        }
+        elseif ($controlValue -like "*enableAutoSwitchGameMode*") {
+            $global:enableAutoSwitchGameMode = $true
+            continue
+        }
+        elseif ($controlValue -like "*NotEnableAutoSwitchGameMode*") {
+            $global:enableAutoSwitchGameMode = $false
             continue
         }
         elseif ($controlValue -like "*stop auto start*") {
