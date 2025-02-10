@@ -344,18 +344,27 @@ function RestartGameServer {
     $currentGameMode = $configContent -match 'GameMode=(\d)'
     Write-Output "[$timestamp] 当前游戏模式为：$currentGameMode,完整的配置文件为：$configContent  `r`n " | Tee-Object -FilePath $guardian_rumbleverse_log -Append
     if($isGlobalVersion) {
+        if ($currentGameMode -eq "GameMode=0") {      
+            Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+            Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
+        }
+        else {
+            Copy-Item -Path "$PSScriptRoot\202501.13.ed\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+            Write-Output "[$timestamp] 当前服务文件路径为（当前最新202501.13.ed版的大逃杀模式，可能不会掉线，稳定一些。） "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        
+        }
     }
     else {
         if ($currentGameMode -eq "GameMode=0") {
-        ## 当前最新版的训练模式比较好用，固定了人机在水池。
-        ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
-        ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
-        ## 但是训练场却不是最好的版本，所以训练场改用最新版
-        #$gameModeFile = ".\202412.02.cn\Server.dll" #国际版不需要这个了。内置了注入
-        Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
-        Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
-       
+            ## 当前最新版的训练模式比较好用，固定了人机在水池。
+            ## 但是大逃杀模式人机有跳海的问题，泡口也不正，为了修复低配置服务器海圈的问题导致的。
+            ## 所以大逃杀模式用的是11.1号的版本，在高配电脑上开服不会有问题。默认采用这个版本。
+            ## 但是训练场却不是最好的版本，所以训练场改用最新版
+            #$gameModeFile = ".\202412.02.cn\Server.dll" #国际版不需要这个了。内置了注入
+            Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+            Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+        
         }
         else {
             Copy-Item -Path "$PSScriptRoot\202411.11.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
