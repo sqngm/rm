@@ -616,11 +616,35 @@ while ($true) {
         }
         elseif ($controlValue -like "*enableAutoSwitchGameMode*") {
             $global:enableAutoSwitchGameMode = $true
-            continue
+            
+            if ($isRoundEnd) { 
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                Write-Output "[$timestamp] control.txt里面 包含 disableAutoSwitchGameMode ，已经开启自动切换游戏模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+               
+                Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
+                Start-Sleep -Seconds 8
+                RestartGameServer        
+                continue
+            }
+            else {
+                # 默认处理逻辑
+            }
         }
-        elseif ($controlValue -like "*NotEnableAutoSwitchGameMode*") {
+        elseif ($controlValue -like "*disableAutoSwitchGameMode*") {
             $global:enableAutoSwitchGameMode = $false
-            continue
+            #continue
+            if ($isRoundEnd) {   
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                Write-Output "[$timestamp] control.txt里面 disableAutoSwitchGameMode ，已经禁用自动切换游戏模式。" | Tee-Object -FilePath $guardian_rumbleverse_log -Append
+             
+                Stop-ProcessInDirectory -directory $gameRootPath -processName $processName
+                Start-Sleep -Seconds 8
+                RestartGameServer        
+                continue
+            }
+            else {
+                # 默认处理逻辑
+            }
         }
         elseif ($controlValue -like "*stop auto start*") {
             # 写入退出日志
