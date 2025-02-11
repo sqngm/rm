@@ -346,11 +346,13 @@ function RestartGameServer {
     if($isGlobalVersion) {
         if ($currentGameMode -eq "GameMode=0") {      
             Copy-Item -Path "$PSScriptRoot\202412.02.cn\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+            Copy-Item -Path "$PSScriptRoot\202412.02.cn\Server.dll" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force #cnfg配置文件不生效所有考dll
             Write-Output "[$timestamp] 当前服务文件路径为（当前最新\202412.02.cn版的训练模式比较好用，固定了人机在水池。）"  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
         }
         else {
             Copy-Item -Path "$PSScriptRoot\202501.13.ed\cnfg" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force
+            Copy-Item -Path "$PSScriptRoot\202501.13.ed\Server.dll" -Destination "$PSScriptRoot\..\Rumbleverse\Binaries\Win64\" -Force #cnfg配置文件不生效所有考dll
             Write-Output "[$timestamp] 当前服务文件路径为（当前最新202501.13.ed版的大逃杀模式，可能不会掉线，稳定一些。） "  | Tee-Object -FilePath $guardian_rumbleverse_log -Append
         
         }
