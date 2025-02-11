@@ -1,0 +1,10 @@
+[GUI]
+DisplayHookWarning=False
+BypassSyntaxError=False
+BypassIntegrityFailure=False
+[DLL]
+DLL0=Server.dll
+DLL1=killcozmo.dll
+[Timer]
+Timer0=10
+Timer1=14

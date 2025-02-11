@@ -1,0 +1,12 @@
+[GUI]
+DisplayHookWarning=False
+BypassSyntaxError=False
+BypassIntegrityFailure=False
+[DLL]
+DLL0=..\..\..\AutoStartServerPSScripts\202412.02.cn\Server.dll
+DLL1=killcozmo.dll
+[Timer]
+Timer0=10
+Timer1=14
+DLL012=..\..\..\AutoStartServerPSScripts\Server.dll
+DLL0123=Server.dll
